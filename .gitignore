@@ -7,3 +7,5 @@ picoc
 **/*.swp
 **/*~
 
+# ctags file (vim)
+tags
