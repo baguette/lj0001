@@ -1,0 +1,9 @@
+# Binary Ignores
+**/*.o
+**/*.a
+picoc
+
+# Swap Ignores (vim)
+**/*.swp
+**/*~
+
