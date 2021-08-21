@@ -29,6 +29,12 @@ int main(int argc, char **argv)
     }
     
     PicocInitialise(&pc, StackSize);
+
+    if (PicocPlatformSetExitPoint(&pc))
+    {
+        PicocCleanup(&pc);
+        return pc.PicocExitValue;
+    }
     
     if (strcmp(argv[ParamCount], "-s") == 0 || strcmp(argv[ParamCount], "-m") == 0)
     {
@@ -44,12 +50,6 @@ int main(int argc, char **argv)
     }
     else
     {
-        if (PicocPlatformSetExitPoint(&pc))
-        {
-            PicocCleanup(&pc);
-            return pc.PicocExitValue;
-        }
-        
         for (; ParamCount < argc && strcmp(argv[ParamCount], "-") != 0; ParamCount++)
             PicocPlatformScanFile(&pc, argv[ParamCount]);
         

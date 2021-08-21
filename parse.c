@@ -578,8 +578,21 @@ enum ParseResult ParseStatement(struct ParseState *Parser, int CheckTrailingSemi
     if (Parser->DebugMode && Parser->Mode == RunModeRun)
         DebugCheckStatement(Parser);
     
-    /* take note of where we are and then grab a token to see what statement we have */   
+    /* take note of where we are and then grab a token */
     ParserCopy(&PreState, Parser);
+    Token = LexGetToken(Parser, &LexerValue, TRUE);
+
+    /* every statement should start with a comment */
+    if (Token != TokenComment)
+    {
+        ProgramFail(Parser, "expected: comment");
+    }
+#ifdef DEBUG_LEXER
+    printf("found comment: '%s'\n", (char *)LexerValue->Val->Pointer);
+#endif
+
+    /* XXX:  do we need to copy the Parser state into PreState here??? */
+    /* get the next Token of the statement */
     Token = LexGetToken(Parser, &LexerValue, TRUE);
     
     switch (Token)

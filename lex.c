@@ -425,6 +425,72 @@ void LexSkipComment(struct LexState *Lexer, char NextChar, enum LexToken *Return
     }
 }
 
+enum LexToken LexGetComment(Picoc *pc, struct LexState *Lexer, struct Value *Value, char NextChar)
+{
+    const char *StartPos = Lexer->Pos;
+    const char *EndPos;
+    char *EscBuf;
+    char *EscBufPos;
+    char *RegString;
+    struct Value *ArrayValue;
+
+    if (NextChar == '*')
+    {
+        /* conventional C comment */
+        while (Lexer->Pos != Lexer->End && (*(Lexer->Pos-1) != '*' || *Lexer->Pos != '/'))
+        {
+            /* find the end */
+            if (*Lexer->Pos == '\r' && Lexer->Pos+1 != Lexer->End)
+                Lexer->Pos++;
+            
+            if (*Lexer->Pos == '\n' && Lexer->Pos+1 != Lexer->End)
+            {
+                Lexer->Line++;
+                Lexer->Pos++;
+                Lexer->CharacterPos = 0;
+                Lexer->EmitExtraNewlines++;
+            } else
+                LEXER_INC(Lexer);
+        }
+
+        LEXER_INC(Lexer);
+    }
+    else
+    {
+        /* C++ style comment */
+        while (Lexer->Pos != Lexer->End && *Lexer->Pos != '\n')
+            LEXER_INC(Lexer);
+    }
+
+    EndPos = Lexer->Pos;
+
+    EscBuf = HeapAllocStack(pc, EndPos - StartPos);
+    if (EscBuf == NULL)
+        LexFail(pc, Lexer, "out of memory");
+
+    for (EscBufPos = EscBuf, Lexer->Pos = StartPos; Lexer->Pos != EndPos;)
+        *EscBufPos++ = *Lexer->Pos++;
+
+    /* try to find an existing copy of this comment  */
+    RegString = TableStrRegister2(pc, EscBuf, EscBufPos - EscBuf);
+    HeapPopStack(pc, EscBuf, EndPos - StartPos);
+    ArrayValue = VariableStringLiteralGet(pc, RegString);
+    if (ArrayValue == NULL)
+    {
+        /* create and store this comment */
+        ArrayValue = VariableAllocValueAndData(pc, NULL, 0, FALSE, NULL, TRUE);
+        ArrayValue->Typ = pc->CharArrayType;
+        ArrayValue->Val = (union AnyValue *)RegString;
+        VariableStringLiteralDefine(pc, RegString, ArrayValue);
+    }
+
+    /* create the the pointer for this char* */
+    Value->Typ = pc->CharPtrType;
+    Value->Val->Pointer = RegString;
+
+    return TokenComment;
+}
+
 /* get a single token from the source - used while scanning */
 enum LexToken LexScanGetToken(Picoc *pc, struct LexState *Lexer, struct Value **Value)
 {
@@ -484,7 +550,7 @@ enum LexToken LexScanGetToken(Picoc *pc, struct LexState *Lexer, struct Value **
             case '+': NEXTIS3('=', TokenAddAssign, '+', TokenIncrement, TokenPlus); break;
             case '-': NEXTIS4('=', TokenSubtractAssign, '>', TokenArrow, '-', TokenDecrement, TokenMinus); break;
             case '*': NEXTIS('=', TokenMultiplyAssign, TokenAsterisk); break;
-            case '/': if (NextChar == '/' || NextChar == '*') { LEXER_INC(Lexer); LexSkipComment(Lexer, NextChar, &GotToken); } else NEXTIS('=', TokenDivideAssign, TokenSlash); break;
+            case '/': if (NextChar == '/' || NextChar == '*') { LEXER_INC(Lexer); GotToken = LexGetComment(pc, Lexer, *Value, NextChar); } else NEXTIS('=', TokenDivideAssign, TokenSlash); break;
             case '%': NEXTIS('=', TokenModulusAssign, TokenModulus); break;
             case '<': if (Lexer->Mode == LexModeHashInclude) GotToken = LexGetStringConstant(pc, Lexer, *Value, '>'); else { NEXTIS3PLUS('=', TokenLessEqual, '<', TokenShiftLeft, '=', TokenShiftLeftAssign, TokenLessThan); } break; 
             case '>': NEXTIS3PLUS('=', TokenGreaterEqual, '>', TokenShiftRight, '=', TokenShiftRightAssign, TokenGreaterThan); break;
@@ -514,7 +580,10 @@ int LexTokenSize(enum LexToken Token)
 {
     switch (Token)
     {
-        case TokenIdentifier: case TokenStringConstant: return sizeof(char *);
+        case TokenIdentifier:
+        case TokenStringConstant:
+        case TokenComment:
+            return sizeof(char *);
         case TokenIntegerConstant: return sizeof(long);
         case TokenCharacterConstant: return sizeof(unsigned char);
         case TokenFPConstant: return sizeof(double);
@@ -716,6 +785,7 @@ enum LexToken LexGetRawToken(struct ParseState *Parser, struct Value **Value, in
         { 
             switch (Token)
             {
+                case TokenComment:
                 case TokenStringConstant:       pc->LexValue.Typ = pc->CharPtrType; break;
                 case TokenIdentifier:           pc->LexValue.Typ = NULL; break;
                 case TokenIntegerConstant:      pc->LexValue.Typ = &pc->LongType; break;
@@ -746,7 +816,7 @@ enum LexToken LexGetRawToken(struct ParseState *Parser, struct Value **Value, in
 #ifdef DEBUG_LEXER
     printf("Got token=%02x inc=%d pos=%d\n", Token, IncPos, Parser->CharacterPos);
 #endif
-    assert(Token >= TokenNone && Token <= TokenEndOfFunction);
+    assert(Token >= TokenNone && Token < TokenMax);
     return Token;
 }
 

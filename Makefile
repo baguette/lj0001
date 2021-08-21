@@ -1,4 +1,5 @@
 CC=gcc
+#CFLAGS=-Wall -pedantic -g -DUNIX_HOST -DVER=\"2.1\" -DDEBUG_LEXER
 CFLAGS=-Wall -pedantic -g -DUNIX_HOST -DVER=\"2.1\"
 LIBS=-lm -lreadline
 
