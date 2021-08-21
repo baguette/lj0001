@@ -30,6 +30,9 @@ count:
 	@echo "Everything:"
 	@cat $(SRCS) *.h */*.h | wc
 
+tags: *.c *.h platform/*_unix.c cstdlib/*.c
+	ctags $^
+
 .PHONY: clibrary.c
 
 picoc.o: picoc.c picoc.h
