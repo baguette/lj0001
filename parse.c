@@ -526,14 +526,14 @@ enum RunMode ParseBlock(struct ParseState *Parser, int AbsorbOpenBrace, int Cond
         /* condition failed - skip this block instead */
         enum RunMode OldMode = Parser->Mode;
         Parser->Mode = RunModeSkip;
-        while (ParseStatement(Parser, TRUE) == ParseResultOk)
+        while (ParseNugget(Parser, TRUE) == ParseResultOk)
         {}
         Parser->Mode = OldMode;
     }
     else
     { 
         /* just run it in its current mode */
-        while (ParseStatement(Parser, TRUE) == ParseResultOk)
+        while (ParseNugget(Parser, TRUE) == ParseResultOk)
         {}
     }
     
@@ -564,6 +564,36 @@ void ParseTypedef(struct ParseState *Parser)
     }
 }
 
+/* parse a nugget */
+enum ParseResult ParseNugget(struct ParseState *Parser, int CheckTrailingSemicolon)
+{
+    struct Value *LexerValue;
+    enum LexToken Token;
+
+    /* peek a token */
+    Token = LexGetToken(Parser, &LexerValue, FALSE);
+
+    /* every nugget should start with a comment */
+    switch (Token)
+    {
+        case TokenComment:
+            /* found a comment, grab it & advance */
+            Token = LexGetToken(Parser, &LexerValue, TRUE);
+            break;
+        case TokenRightBrace:
+        case TokenEOF:
+            return ParseResultEOF;
+        default:
+            ProgramFail(Parser, "comment expected");
+    }
+
+#ifdef DEBUG_LEXER
+    printf("found comment: '%s'\n", (char *)LexerValue->Val->Pointer);
+#endif
+
+    return ParseStatement(Parser, CheckTrailingSemicolon);
+}
+
 /* parse a statement */
 enum ParseResult ParseStatement(struct ParseState *Parser, int CheckTrailingSemicolon)
 {
@@ -577,21 +607,9 @@ enum ParseResult ParseStatement(struct ParseState *Parser, int CheckTrailingSemi
     /* if we're debugging, check for a breakpoint */
     if (Parser->DebugMode && Parser->Mode == RunModeRun)
         DebugCheckStatement(Parser);
-    
-    /* take note of where we are and then grab a token */
+
+    /* note where we are at the beginning of actual statement */
     ParserCopy(&PreState, Parser);
-    Token = LexGetToken(Parser, &LexerValue, TRUE);
-
-    /* every statement should start with a comment */
-    if (Token != TokenComment)
-    {
-        ProgramFail(Parser, "expected: comment");
-    }
-#ifdef DEBUG_LEXER
-    printf("found comment: '%s'\n", (char *)LexerValue->Val->Pointer);
-#endif
-
-    /* XXX:  do we need to copy the Parser state into PreState here??? */
     /* get the next Token of the statement */
     Token = LexGetToken(Parser, &LexerValue, TRUE);
     
@@ -639,7 +657,7 @@ enum ParseResult ParseStatement(struct ParseState *Parser, int CheckTrailingSemi
                             LexGetToken(Parser, NULL, TRUE);
                             if (!ExpressionParse(Parser, &CValue))
                             {
-                                ProgramFail(Parser, "expected: expression");
+                                ProgramFail(Parser, "expression expected");
                             }
                             
                             #if 0
@@ -947,6 +965,48 @@ enum ParseResult ParseStatement(struct ParseState *Parser, int CheckTrailingSemi
 
 /* quick scan a source file for definitions */
 void PicocParse(Picoc *pc, const char *FileName, const char *Source, int SourceLen, int RunIt, int CleanupNow, int CleanupSource, int EnableDebugger)
+{
+    struct ParseState Parser;
+    enum ParseResult Ok;
+    struct CleanupTokenNode *NewCleanupNode;
+    char *RegFileName = TableStrRegister(pc, FileName);
+    
+    void *Tokens = LexAnalyse(pc, RegFileName, Source, SourceLen, NULL);
+    
+    /* allocate a cleanup node so we can clean up the tokens later */
+    if (!CleanupNow)
+    {
+        NewCleanupNode = HeapAllocMem(pc, sizeof(struct CleanupTokenNode));
+        if (NewCleanupNode == NULL)
+            ProgramFailNoParser(pc, "out of memory");
+        
+        NewCleanupNode->Tokens = Tokens;
+        if (CleanupSource)
+            NewCleanupNode->SourceText = Source;
+        else
+            NewCleanupNode->SourceText = NULL;
+            
+        NewCleanupNode->Next = pc->CleanupTokenList;
+        pc->CleanupTokenList = NewCleanupNode;
+    }
+    
+    /* do the parsing */
+    LexInitParser(&Parser, pc, Source, Tokens, RegFileName, RunIt, EnableDebugger);
+
+    do {
+        Ok = ParseNugget(&Parser, TRUE);
+    } while (Ok == ParseResultOk);
+    
+    if (Ok == ParseResultError)
+        ProgramFail(&Parser, "parse error");
+    
+    /* clean up */
+    if (CleanupNow)
+        HeapFreeMem(pc, Tokens);
+}
+
+/* quick scan internal library source for definitions */
+void PicocParseLibrary(Picoc *pc, const char *FileName, const char *Source, int SourceLen, int RunIt, int CleanupNow, int CleanupSource, int EnableDebugger)
 {
     struct ParseState Parser;
     enum ParseResult Ok;

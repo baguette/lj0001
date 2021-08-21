@@ -497,9 +497,11 @@ void LexInteractiveStatementPrompt(Picoc *pc);
 /* parse.c */
 /* the following are defined in picoc.h:
  * void PicocParse(const char *FileName, const char *Source, int SourceLen, int RunIt, int CleanupNow, int CleanupSource);
+ * void PicocParseLibrary(Picoc *pc, const char *FileName, const char *Source, int SourceLen, int RunIt, int CleanupNow, int CleanupSource, int EnableDebugger);
  * void PicocParseInteractive(); */
 void PicocParseInteractiveNoStartPrompt(Picoc *pc, int EnableDebugger);
 enum ParseResult ParseStatement(struct ParseState *Parser, int CheckTrailingSemicolon);
+enum ParseResult ParseNugget(struct ParseState *Parser, int CheckTrailingSemicolon);
 struct Value *ParseFunctionDefinition(struct ParseState *Parser, struct ValueType *ReturnType, char *Identifier);
 void ParseCleanup(Picoc *pc);
 void ParserCopyPos(struct ParseState *To, struct ParseState *From);

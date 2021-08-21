@@ -41,12 +41,18 @@ void LibraryAdd(Picoc *pc, struct Table *GlobalTable, const char *LibraryName, s
     /* read all the library definitions */
     for (Count = 0; FuncList[Count].Prototype != NULL; Count++)
     {
+    #ifdef DEBUG_LEXER
+        printf("declare: '%s'\n", FuncList[Count].Prototype);
+    #endif
         Tokens = LexAnalyse(pc, IntrinsicName, FuncList[Count].Prototype, strlen((char *)FuncList[Count].Prototype), NULL);
         LexInitParser(&Parser, pc, FuncList[Count].Prototype, Tokens, IntrinsicName, TRUE, FALSE);
         TypeParse(&Parser, &ReturnType, &Identifier, NULL);
         NewValue = ParseFunctionDefinition(&Parser, ReturnType, Identifier);
         NewValue->Val->FuncDef.Intrinsic = FuncList[Count].Func;
         HeapFreeMem(pc, Tokens);
+    #ifdef DEBUG_LEXER
+        printf("ok\n");
+    #endif
     }
 }
 
